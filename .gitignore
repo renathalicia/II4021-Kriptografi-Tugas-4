@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Generated recovery/demo assets
+recovery*.png
+visual_share*.png
+merged*.png
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
