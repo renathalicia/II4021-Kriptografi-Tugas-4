@@ -34,8 +34,10 @@ def encrypt_vault(plaintext_json: str, key: bytes) -> dict:
     if not isinstance(plaintext_json, str):
         raise ValueError("plaintext_json must be a string")
 
+    # Nonce harus unik per enkripsi agar AES-GCM tetap aman.
     nonce = secrets.token_bytes(NONCE_SIZE)
     encrypted = AESGCM(key).encrypt(nonce, plaintext_json.encode("utf-8"), None)
+    # Library mengembalikan ciphertext dan tag menyatu, lalu disimpan terpisah.
     ciphertext, tag = encrypted[:-TAG_SIZE], encrypted[-TAG_SIZE:]
     return {
         "nonce": _b64encode(nonce),
@@ -49,6 +51,7 @@ def decrypt_vault(payload: dict, key: bytes) -> str:
     if not isinstance(payload, dict):
         raise ValueError("encrypted payload must be a dictionary")
 
+    # Payload dari storage harus lengkap dan valid base64 sebelum didekripsi.
     try:
         nonce = _b64decode(payload["nonce"], "nonce")
         ciphertext = _b64decode(payload["ciphertext"], "ciphertext")
@@ -62,6 +65,7 @@ def decrypt_vault(payload: dict, key: bytes) -> str:
         raise ValueError("tag must be 16 bytes")
 
     try:
+        # Tag GCM memverifikasi key dan integritas data saat decrypt.
         plaintext = AESGCM(key).decrypt(nonce, ciphertext + tag, None)
     except InvalidTag as exc:
         raise ValueError("decryption failed: invalid key or corrupted payload") from exc

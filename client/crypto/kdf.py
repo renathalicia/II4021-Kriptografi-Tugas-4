@@ -10,6 +10,7 @@ DEFAULT_ITERATIONS = 200000
 
 
 def generate_salt() -> bytes:
+    # Salt acak membuat hasil derivasi key berbeda untuk tiap vault/user.
     return os.urandom(SALT_SIZE)
 
 
@@ -25,6 +26,7 @@ def derive_key(
     if not isinstance(iterations, int) or iterations <= 0:
         raise ValueError("iterations must be a positive integer")
 
+    # PBKDF2-SHA256 mengubah master password menjadi key AES-128.
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=KEY_SIZE,

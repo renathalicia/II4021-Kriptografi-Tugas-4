@@ -14,6 +14,7 @@ def split_qr_visual(qr_path: str, share1_path: str, share2_path: str) -> None:
     qr = _load_binary_image(qr_path)
     width, height = qr.size
     row_bytes = (width + 7) // 8
+    # Mask acak menjadi share pertama; share kedua dibentuk dengan XOR QR.
     random_mask = secrets.token_bytes(row_bytes * height)
     share1 = Image.frombytes("1", qr.size, random_mask)
     share2 = ImageChops.logical_xor(share1, qr)
@@ -28,5 +29,6 @@ def merge_visual_shares(share1_path: str, share2_path: str, output_path: str) ->
     if share1.size != share2.size:
         raise ValueError("visual shares must have the same dimensions")
 
+    # XOR dua visual share menghasilkan kembali QR recovery asli.
     merged = ImageChops.logical_xor(share1, share2)
     merged.save(output_path)

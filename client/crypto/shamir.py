@@ -26,10 +26,12 @@ def _b64decode(value: str, field_name: str) -> bytes:
 
 
 def generate_master_key() -> bytes:
+    # Master key 16 byte dipakai sebagai secret utama untuk skema recovery.
     return secrets.token_bytes(MASTER_KEY_SIZE)
 
 
 def validate_share(share: dict) -> tuple[int, bytes]:
+    # Validasi ketat mencegah share palsu/rusak masuk ke proses rekonstruksi.
     if not isinstance(share, dict):
         raise ValueError("share must be a dictionary")
     if set(share.keys()) != {"x", "y"}:
@@ -54,6 +56,7 @@ def split_master_key(master_key: bytes) -> list[dict]:
     if not isinstance(master_key, bytes) or len(master_key) != MASTER_KEY_SIZE:
         raise ValueError("master key must be 16 bytes")
 
+    # Skema 2-dari-3: cukup dua share berbeda untuk memulihkan master key.
     return [{"x": x, "y": _b64encode(y)} for x, y in Shamir.split(2, 3, master_key)]
 
 
@@ -66,17 +69,20 @@ def reconstruct_master_key(shares: list[dict]) -> bytes:
         raise ValueError("duplicate share x values are not allowed")
 
     try:
+        # PyCryptodome menggabungkan dua share valid menjadi master key awal.
         return Shamir.combine(parsed)
     except ValueError as exc:
         raise ValueError("failed to reconstruct master key") from exc
 
 
 def encrypt_local_share(share: dict, derived_key: bytes) -> dict:
+    # Share lokal diserialisasi lalu dienkripsi memakai key dari master password.
     serialized_share = serialize_share(share)
     return encrypt_vault(serialized_share, derived_key)
 
 
 def decrypt_local_share(payload: dict, derived_key: bytes) -> dict:
+    # Setelah decrypt, isi share tetap divalidasi sebelum dikembalikan.
     plaintext = decrypt_vault(payload, derived_key)
     try:
         share = json.loads(plaintext)
