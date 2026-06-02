@@ -3,3 +3,5 @@ pycryptodome
 qrcode
 Pillow
 pytest
+flask
+requests

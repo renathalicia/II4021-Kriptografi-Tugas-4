@@ -2,7 +2,7 @@ import requests
 import base64
 
 # [KOORDINASIIN SAMA B] ganti URL dan nama field kalau beda
-BASE_URL = "http://localhost:5000"
+BASE_URL = "http://127.0.0.1:5000"
 TIMEOUT = 5
 
 
