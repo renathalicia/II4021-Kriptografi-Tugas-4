@@ -33,3 +33,7 @@ merged*.png
 Thumbs.db
 .vscode/
 .idea/
+
+# Local User Data
+data/*
+!data/.gitkeep

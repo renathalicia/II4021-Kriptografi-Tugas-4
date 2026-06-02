@@ -1,3 +1,9 @@
+import os
+import sys
+
+if __package__ in (None, ""):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Flask
 from server.db.database import init_db
 from server.routes.vault_routes import vault_bp

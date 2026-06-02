@@ -126,7 +126,7 @@ def test_update_user_tidak_ada(client):
     })
     assert r.status_code == 404
 
-def test_update_nonce_berubah(cleint):
+def test_update_nonce_berubah(client):
     """Setelah update, vault yang di fetch harus punya nonce baru"""
     _register(client, "endah")
     nonce_baru = base64.b64encode(b"\xff" * 12).decode() # nonce berbeda

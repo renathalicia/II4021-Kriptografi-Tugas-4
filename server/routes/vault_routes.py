@@ -58,7 +58,7 @@ def fetch_vault(username: str):
         return jsonify({"error": "vault not found"}), 404
     return jsonify(result), 200
 
-@vault_bp.route("/vault/update", methods=["POST"])
+@vault_bp.route("/vault/update", methods=["POST", "PUT"])
 def update():
     data = request.get_json(silent=True)
     if not data:
