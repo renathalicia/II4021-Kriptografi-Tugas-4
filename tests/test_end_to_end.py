@@ -1,85 +1,83 @@
-"""
-End-to-end tests untuk client.
-Test ini mock crypto A supaya bisa dijalankan C secara independen.
-
-Jalankan: pytest tests/test_end_to_end.py -v
-"""
-
-import pytest
+import base64
 import json
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+import pytest
+
+_FAKE_Y = base64.b64encode(b"\x00" * 16).decode()
+
 
 def _fake_encrypt_vault(plaintext: str, key: bytes):
-    """A's encrypt_vault return dict"""
     return {
-        "nonce": "aaaaaa==",
-        "ciphertext": plaintext.encode().hex(),  # fake
-        "tag": "bbbbbb==",
+        "nonce": base64.b64encode(b"\x00" * 12).decode(),
+        "ciphertext": base64.b64encode(plaintext.encode()).decode(),
+        "tag": base64.b64encode(b"\x00" * 16).decode(),
     }
 
+
 def _fake_decrypt_vault(payload: dict, key: bytes):
-    """A's decrypt_vault return str"""
-    return json.dumps([])  # empty vault
+    return json.dumps([])
+
 
 def _fake_split_master_key(master_key: bytes):
-    """A's split return list[dict]"""
     return [
-        {"x": 1, "y": "eeeee="},
-        {"x": 2, "y": "fffff="},
-        {"x": 3, "y": "ggggg="},
+        {"x": 1, "y": _FAKE_Y},
+        {"x": 2, "y": _FAKE_Y},
+        {"x": 3, "y": _FAKE_Y},
     ]
 
+
 def _fake_reconstruct_master_key(shares: list):
-    """A's reconstruct return bytes"""
     return b"\x00" * 16
+
 
 def _fake_derive_key(password: str, salt: bytes, iterations: int = 200000):
-    """A's derive_key return key bytes only"""
     return b"\x00" * 16
 
+
 def _fake_generate_salt():
-    """A's generate_salt return bytes"""
     return b"salt" * 4
 
+
 def _fake_generate_password(length: int):
-    """A's password generator"""
     return "P" * length
 
+
 def _fake_encrypt_local_share(share: dict, derived_key: bytes):
-    """A's encrypt_local_share return dict"""
-    return {"nonce": "aaa==", "ciphertext": "bbb==", "tag": "ccc=="}
+    return {"nonce": "AAAA", "ciphertext": "AAAA", "tag": "AAAA"}
+
 
 def _fake_decrypt_local_share(payload: dict, derived_key: bytes):
-    """A's decrypt_local_share return dict"""
-    return {"x": 1, "y": "eeee=="}
+    return {"x": 1, "y": _FAKE_Y}
+
 
 def _fake_serialize_share(share: dict):
-    """A's serialize_share return JSON string"""
-    return json.dumps(share)
+    return json.dumps(share, sort_keys=True, separators=(",", ":"))
+
 
 def _fake_validate_share(share: dict):
-    """A's validate_share just validate, no return"""
-    pass
+    return None
 
 
 _CRYPTO_MOCK = {
-    "client.services.vault_service.generate_master_key": lambda: b"\x00" * 16,
-    "client.services.vault_service.split_master_key": _fake_split_master_key,
-    "client.services.vault_service.reconstruct_master_key": _fake_reconstruct_master_key,
-    "client.services.vault_service.encrypt_vault": _fake_encrypt_vault,
-    "client.services.vault_service.decrypt_vault": _fake_decrypt_vault,
-    "client.services.vault_service.derive_key": _fake_derive_key,
-    "client.services.vault_service.generate_salt": _fake_generate_salt,
-    "client.services.vault_service.generate_password": _fake_generate_password,
-    "client.services.vault_service.encrypt_local_share": _fake_encrypt_local_share,
-    "client.services.vault_service.decrypt_local_share": _fake_decrypt_local_share,
-    "client.services.vault_service.serialize_share": _fake_serialize_share,
+    "generate_master_key": lambda: b"\x00" * 16,
+    "split_master_key": _fake_split_master_key,
+    "reconstruct_master_key": _fake_reconstruct_master_key,
+    "encrypt_vault": _fake_encrypt_vault,
+    "decrypt_vault": _fake_decrypt_vault,
+    "derive_key": _fake_derive_key,
+    "generate_salt": _fake_generate_salt,
+    "generate_password": _fake_generate_password,
+    "encrypt_local_share": _fake_encrypt_local_share,
+    "decrypt_local_share": _fake_decrypt_local_share,
+    "serialize_share": _fake_serialize_share,
+    "validate_share": _fake_validate_share,
 }
+
 
 @pytest.fixture(autouse=True)
 def redirect_data(tmp_path, monkeypatch):
-    """Arahkan folder data ke tmp folder supaya tidak kotor file asli."""
     import client.storage.local_storage as ls
     import client.storage.backup_storage as bs
 
@@ -92,32 +90,29 @@ def redirect_data(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mock_api_ok():
-    """API mock: server online, semua request berhasil."""
     with patch("client.services.vault_service._api") as m:
         m.ping.return_value = True
         m.register.return_value = True
         m.update.return_value = True
         m.fetch.return_value = {
-            "share_x": 2,
-            "share_y": b"y" * 16,
-            "enc_vault": json.dumps([]).encode(),
-            "nonce": b"\x00" * 12,
+            "server_share": {"x": 2, "y": _FAKE_Y},
+            "enc_vault_payload": {
+                "nonce": base64.b64encode(b"\x00" * 12).decode(),
+                "ciphertext": base64.b64encode(json.dumps([]).encode()).decode(),
+                "tag": base64.b64encode(b"\x00" * 16).decode(),
+            },
         }
         yield m
 
-
-# ===== Test init vault =====
 
 class TestInitVault:
     def test_setup_berhasil_kembalikan_recovery_share(self, mock_api_ok):
         with patch.multiple("client.services.vault_service", **_CRYPTO_MOCK):
             from client.services.vault_service import init_vault
             result = init_vault("usertest", "masterpass")
-        # format recovery share harus x|hex_y
-        assert "|" in result
-        x, y = result.split("|")
-        assert x.isdigit()
-        assert len(y) > 0
+        parsed = json.loads(result)
+        assert isinstance(parsed["x"], int)
+        assert len(parsed["y"]) > 0
 
     def test_setup_gagal_kalau_server_mati(self):
         with patch("client.services.vault_service._api") as m:
@@ -134,8 +129,6 @@ class TestInitVault:
                 init_vault("user1", "pw")
 
 
-# ===== Test buka vault mode normal =====
-
 class TestBukaVaultNormal:
     @pytest.fixture(autouse=True)
     def init_dulu(self, mock_api_ok):
@@ -151,10 +144,9 @@ class TestBukaVaultNormal:
         assert sesi.readonly is False
 
     def test_password_salah_ditolak(self, mock_api_ok):
-        # Kalau decrypt raise exception, vault service harus tangkap dan raise ValueError
-        def decrypt_gagal(ct, key, nonce):
-            raise Exception("GCM auth tag invalid")
-        patches = {**_CRYPTO_MOCK, "client.services.vault_service.decrypt": decrypt_gagal}
+        def decrypt_share_gagal(payload, key):
+            raise ValueError("GCM auth tag invalid")
+        patches = {**_CRYPTO_MOCK, "decrypt_local_share": decrypt_share_gagal}
         with patch.multiple("client.services.vault_service", **patches):
             from client.services.vault_service import buka_vault_normal
             with pytest.raises(ValueError, match="Master password salah"):
@@ -169,8 +161,6 @@ class TestBukaVaultNormal:
                 with pytest.raises(RuntimeError):
                     buka_vault_normal("benar")
 
-
-# ===== Test CRUD =====
 
 class TestCRUDVault:
     @pytest.fixture(autouse=True)
@@ -218,14 +208,13 @@ class TestCRUDVault:
         assert self.sesi.modified is False
 
     def test_generate_password_panjang_benar(self):
-        pw = self.sesi  # cuma cek panjangnya
         from client.services.vault_service import buat_password_acak
-        with patch("client.services.vault_service.gen_pw", side_effect=_fake_gen_pw):
+        with patch("client.services.vault_service.generate_password",
+                   side_effect=_fake_generate_password):
             hasil = buat_password_acak(20)
         assert len(hasil) == 20
+        assert hasil == "P" * 20
 
-
-# ===== Test mode backup =====
 
 class TestModeBackup:
     @pytest.fixture(autouse=True)
@@ -247,29 +236,29 @@ class TestModeBackup:
                 buka_vault_backup("pw", "ini-bukan-format-yang-benar")
 
     def test_password_salah_di_backup_ditolak(self):
-        def decrypt_gagal(ct, key, nonce):
-            raise Exception("auth gagal")
-        patches = {**_CRYPTO_MOCK, "client.services.vault_service.decrypt": decrypt_gagal}
+        def decrypt_share_gagal(payload, key):
+            raise ValueError("auth gagal")
+        patches = {**_CRYPTO_MOCK, "decrypt_local_share": decrypt_share_gagal}
         with patch.multiple("client.services.vault_service", **patches):
             from client.services.vault_service import buka_vault_backup
             with pytest.raises(ValueError, match="Master password salah"):
                 buka_vault_backup("salah", self.recovery)
 
 
-# ===== Test enkripsi ulang setelah perubahan =====
-
 class TestReenkripsivault:
     def test_nonce_baru_setiap_simpan(self, mock_api_ok):
-        """Setiap simpan harus pakai nonce baru (nonce tidak boleh sama)."""
         nonce_list = []
 
-        def fake_enc_track(data, key):
-            import os
-            nonce = os.urandom(12)   # random tiap kali
+        def fake_encrypt_track(plaintext, key):
+            nonce = base64.b64encode(os.urandom(12)).decode()
             nonce_list.append(nonce)
-            return data, nonce
+            return {
+                "nonce": nonce,
+                "ciphertext": base64.b64encode(b"cipher").decode(),
+                "tag": base64.b64encode(b"\x00" * 16).decode(),
+            }
 
-        patches = {**_CRYPTO_MOCK, "client.services.vault_service.encrypt": fake_enc_track}
+        patches = {**_CRYPTO_MOCK, "encrypt_vault": fake_encrypt_track}
         with patch.multiple("client.services.vault_service", **patches):
             from client.services.vault_service import init_vault, buka_vault_normal
             init_vault("u", "p")
@@ -279,7 +268,5 @@ class TestReenkripsivault:
             sesi.tambah("Y", "y@y.com", "py")
             sesi.simpan()
 
-        # Pastiin encrypt dipanggil minimal 2x untuk 2 kali simpan
         assert len(nonce_list) >= 2
-        # Nonce harusnya beda tiap kali
         assert nonce_list[-1] != nonce_list[-2]
