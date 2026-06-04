@@ -1,12 +1,22 @@
 import getpass
+import json
+import os
+import tempfile
+
+from client.crypto.qr_recovery import recovery_share_from_qr, recovery_share_to_qr
+from client.crypto.visual_crypto import merge_visual_shares, split_qr_visual
 from client.services.vault_service import (
     init_vault, buka_vault_normal, buka_vault_backup,
     buat_password_acak, VaultSession
 )
-from client.storage.local_storage import sudah_ada
+from client.storage import local_storage
 from client.services.api_client import APIClient
 
 _api = APIClient()
+
+RECOVERY_SHARE_1_NAME = "recovery_visual_share_1.png"
+RECOVERY_SHARE_2_NAME = "recovery_visual_share_2.png"
+MERGED_RECOVERY_QR_NAME = "recovery_merged.png"
 
 
 def tampilkan_menu_utama():
@@ -33,7 +43,7 @@ def tampilkan_menu_utama():
 
 
 def _menu_setup():
-    if sudah_ada():
+    if local_storage.sudah_ada():
         print("[!] Vault sudah ada di perangkat ini.")
         return
 
@@ -61,11 +71,23 @@ def _menu_setup():
     print("=" * 55)
     print(recovery_str)
     print("=" * 55)
+
+    try:
+        share1_path, share2_path = _buat_visual_recovery(recovery_str)
+    except Exception as e:
+        print(f"[!] Gagal membuat visual recovery share: {e}")
+        print("[!] Simpan recovery share teks di atas sebagai fallback.")
+    else:
+        print("[+] Visual recovery share dibuat:")
+        print(f"    1. {share1_path}")
+        print(f"    2. {share2_path}")
+        print("    Simpan kedua file ini terpisah; mode backup membutuhkan keduanya.")
+
     print("[+] Vault berhasil dibuat!")
 
 
 def _menu_normal():
-    if not sudah_ada():
+    if not local_storage.sudah_ada():
         print("[!] Vault belum ada. Lakukan setup dulu.")
         return
 
@@ -88,12 +110,21 @@ def _menu_normal():
 
 
 def _menu_backup():
-    if not sudah_ada():
+    if not local_storage.sudah_ada():
         print("[!] Vault belum ada. Lakukan setup dulu.")
         return
 
     pw = getpass.getpass("Master password: ")
-    recovery = input("Recovery share: ").strip()
+    pilihan = input("Recovery source: (1) visual share PNG  (2) teks manual [1]: ").strip() or "1"
+
+    if pilihan == "2":
+        recovery = input("Recovery share: ").strip()
+    else:
+        try:
+            recovery = _input_visual_recovery_share()
+        except Exception as e:
+            print(f"[!] Gagal membaca visual recovery share: {e}")
+            return
 
     try:
         sesi = buka_vault_backup(pw, recovery)
@@ -103,6 +134,41 @@ def _menu_backup():
 
     print("[+] Vault terbuka — MODE BACKUP (read-only)")
     _sesi_interaktif(sesi)
+
+
+def _recovery_path(filename: str) -> str:
+    return os.path.join(local_storage.DATA_DIR, filename)
+
+
+def _buat_visual_recovery(recovery_str: str) -> tuple[str, str]:
+    share = json.loads(recovery_str)
+    os.makedirs(local_storage.DATA_DIR, exist_ok=True)
+    share1_path = _recovery_path(RECOVERY_SHARE_1_NAME)
+    share2_path = _recovery_path(RECOVERY_SHARE_2_NAME)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        qr_path = os.path.join(tmp_dir, "recovery_qr.png")
+        recovery_share_to_qr(share, qr_path)
+        split_qr_visual(qr_path, share1_path, share2_path)
+
+    return share1_path, share2_path
+
+
+def _input_visual_recovery_share() -> str:
+    default_share1 = _recovery_path(RECOVERY_SHARE_1_NAME)
+    default_share2 = _recovery_path(RECOVERY_SHARE_2_NAME)
+
+    share1_path = input(f"Visual share 1 [{default_share1}]: ").strip() or default_share1
+    share2_path = input(f"Visual share 2 [{default_share2}]: ").strip() or default_share2
+
+    return _recovery_share_from_visual_paths(share1_path, share2_path)
+
+
+def _recovery_share_from_visual_paths(share1_path: str, share2_path: str) -> str:
+    os.makedirs(local_storage.DATA_DIR, exist_ok=True)
+    merged_path = _recovery_path(MERGED_RECOVERY_QR_NAME)
+    merge_visual_shares(share1_path, share2_path, merged_path)
+    return recovery_share_from_qr(merged_path)
 
 
 # ===== Loop interaktif vault =====

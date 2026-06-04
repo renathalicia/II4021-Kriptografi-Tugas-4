@@ -2,6 +2,7 @@ cryptography
 pycryptodome
 qrcode
 Pillow
+opencv-python
 pytest
 flask
 requests

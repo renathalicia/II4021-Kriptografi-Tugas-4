@@ -7,12 +7,13 @@ from PIL import Image, ImageChops
 from client.crypto.aes_gcm import decrypt_vault, encrypt_vault
 from client.crypto.kdf import derive_key, generate_salt
 from client.crypto.password_generator import PASSWORD_ALPHABET, generate_password
-from client.crypto.qr_recovery import recovery_share_to_qr
+from client.crypto.qr_recovery import recovery_share_from_qr, recovery_share_to_qr
 from client.crypto.shamir import (
     decrypt_local_share,
     encrypt_local_share,
     generate_master_key,
     reconstruct_master_key,
+    serialize_share,
     split_master_key,
 )
 from client.crypto.visual_crypto import merge_visual_shares, split_qr_visual
@@ -170,6 +171,16 @@ def test_recovery_share_to_qr_creates_png(tmp_path):
         assert image.size[1] > 0
 
 
+def test_recovery_share_from_qr_reads_same_share(tmp_path):
+    share = split_master_key(generate_master_key())[2]
+    qr_path = tmp_path / "recovery.png"
+    recovery_share_to_qr(share, str(qr_path))
+
+    decoded = recovery_share_from_qr(str(qr_path))
+
+    assert decoded == serialize_share(share)
+
+
 def test_visual_crypto_splits_and_merges_qr_back_to_original(tmp_path):
     share = split_master_key(generate_master_key())[2]
     qr_path = tmp_path / "recovery.png"
@@ -189,3 +200,17 @@ def test_visual_crypto_splits_and_merges_qr_back_to_original(tmp_path):
         with Image.open(merged_path).convert("1") as merged:
             difference = ImageChops.difference(original, merged)
             assert difference.getbbox() is None
+
+
+def test_visual_backup_flow_recovers_same_recovery_share(tmp_path):
+    share = split_master_key(generate_master_key())[2]
+    qr_path = tmp_path / "recovery.png"
+    share1_path = tmp_path / "visual_share_1.png"
+    share2_path = tmp_path / "visual_share_2.png"
+    merged_path = tmp_path / "merged.png"
+
+    recovery_share_to_qr(share, str(qr_path))
+    split_qr_visual(str(qr_path), str(share1_path), str(share2_path))
+    merge_visual_shares(str(share1_path), str(share2_path), str(merged_path))
+
+    assert recovery_share_from_qr(str(merged_path)) == serialize_share(share)

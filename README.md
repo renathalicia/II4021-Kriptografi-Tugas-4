@@ -18,14 +18,14 @@ Dua mode akses:
 - SQLite — penyimpanan data terenkripsi di server
 - cryptography — AES-128-GCM dan PBKDF2 (KDF)
 - pycryptodome — Shamir Secret Sharing
-- qrcode + Pillow — QR code dan kriptografi visual recovery share (bonus)
+- qrcode + Pillow + OpenCV — QR code dan kriptografi visual recovery share (bonus)
 - requests — komunikasi HTTP sisi klien
 - pytest — pengujian
 
 ## Dependensi
 
 Tercantum di `requirements.txt`: cryptography, pycryptodome, qrcode, Pillow,
-pytest, flask, requests.
+opencv-python, pytest, flask, requests.
 
 ## Cara menjalankan
 
@@ -51,6 +51,10 @@ Jalankan semua perintah dari root repository.
        python -m client.main
 
    Ikuti menu: setup vault baru, buka mode normal, atau buka mode backup.
+   Saat setup, recovery share juga dibuat sebagai dua file visual share PNG di
+   folder `data/`. Mode backup dapat menggabungkan dua file PNG tersebut untuk
+   membaca kembali recovery share; paste teks recovery tetap tersedia sebagai
+   fallback.
 
 5. (Opsional) jalankan pengujian:
 

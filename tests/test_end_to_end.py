@@ -244,6 +244,27 @@ class TestModeBackup:
             with pytest.raises(ValueError, match="Master password salah"):
                 buka_vault_backup("salah", self.recovery)
 
+    def test_menu_backup_visual_share_membuka_vault(self, monkeypatch):
+        from client.cli import menu
+
+        share1_path, share2_path = menu._buat_visual_recovery(self.recovery)
+        calls = {}
+
+        def fake_buka_vault_backup(password, recovery):
+            calls["password"] = password
+            calls["recovery"] = recovery
+            return object()
+
+        inputs = iter(["1", share1_path, share2_path])
+        monkeypatch.setattr(menu.getpass, "getpass", lambda prompt: "pw")
+        monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+        monkeypatch.setattr(menu, "buka_vault_backup", fake_buka_vault_backup)
+        monkeypatch.setattr(menu, "_sesi_interaktif", lambda sesi: None)
+
+        menu._menu_backup()
+
+        assert calls == {"password": "pw", "recovery": self.recovery}
+
 
 class TestReenkripsivault:
     def test_nonce_baru_setiap_simpan(self, mock_api_ok):
