@@ -1,7 +1,7 @@
 import requests
 import base64
 
-# [KOORDINASIIN SAMA B] ganti URL dan nama field kalau beda
+# ganti url dan nama field kalau beda dengan yang dikerjain cia
 BASE_URL = "http://127.0.0.1:5000"
 TIMEOUT = 5
 
@@ -18,14 +18,29 @@ class APIClient:
         except Exception:
             return False
 
-    def register(self, username: str, enc_local_payload: dict,
-             enc_vault_payload: dict, server_share: dict) -> bool:
-    #Kirim data awal vault ke server saat setup
+    # def register(self, username: str, enc_local_payload: dict,
+    #          enc_vault_payload: dict, server_share: dict) -> bool:
+    # #Kirim data awal vault ke server saat setup
+    #     payload = {
+    #         "username": username,
+    #         "enc_local_payload": enc_local_payload, # dict {nonce, ciphertext, tag}
+    #         "enc_vault_payload": enc_vault_payload, # dict {nonce, ciphertext, tag}
+    #         "server_share": server_share, # dict {x, y}
+    #     }
+    #     try:
+    #         r = requests.post(f"{self.url}/vault/register", json=payload, timeout=TIMEOUT)
+    #         return r.status_code in (200, 201)
+    #     except Exception:
+    #         return False
+    
+    def register(self, username: str, enc_vault_payload: dict, server_share: dict) -> bool:
+        #Kirim data awal vault ke server saat setup
+        #enc_local_payload tidak dikirim, local share (walaupun terenkripsi)
+        #hanya disimpan di klien, server tidak boleh menerimanya (zero-knowledge)
         payload = {
             "username": username,
-            "enc_local_payload": enc_local_payload, # dict {nonce, ciphertext, tag}
-            "enc_vault_payload": enc_vault_payload, # dict {nonce, ciphertext, tag}
-            "server_share": server_share, # dict {x, y}
+            "enc_vault_payload": enc_vault_payload,  # dict {nonce, ciphertext, tag}
+            "server_share": server_share,            # dict {x, y}
         }
         try:
             r = requests.post(f"{self.url}/vault/register", json=payload, timeout=TIMEOUT)

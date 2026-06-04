@@ -124,9 +124,13 @@ def init_vault(username: str, master_password: str) -> str:
     enc_vault_payload = encrypt_vault(vault_kosong, master_key)
 
     # 6. Kirim ke server
-    if not _api.register(username, enc_local_payload, enc_vault_payload, server_share):
-        raise RuntimeError("Gagal register ke server.")
+    # if not _api.register(username, enc_local_payload, enc_vault_payload, server_share):
+    #     raise RuntimeError("Gagal register ke server.")
 
+    # 6. Kirim ke server (tanpa enc_local_payload, krn hanya disimpan lokal)
+    if not _api.register(username, enc_vault_payload, server_share):
+        raise RuntimeError("Gagal register ke server.")
+    
     # 7. Simpan lokal
     simpan_config(username, enc_local_payload, kdf_salt, iterations=200000)
     simpan_backup(enc_vault_payload)
