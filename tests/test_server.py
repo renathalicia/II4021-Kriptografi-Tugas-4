@@ -81,6 +81,75 @@ def test_register_server_share_tidak_lengkap(client):
         "server_share": {"x": 2} # hanya x, tanpa y
     })
     assert r.status_code == 400
+
+def test_register_menolak_unknown_field(client):
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": _sample_vault_payload(),
+        "server_share": _sample_server_share(),
+        "debug": True,
+    })
+    assert r.status_code == 400
+
+@pytest.mark.parametrize("field", ["master_password", "derived_key", "recovery_share"])
+def test_register_menolak_field_rahasia_tambahan(client, field):
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        field: "seharusnya_ditolak",
+        "enc_vault_payload": _sample_vault_payload(),
+        "server_share": _sample_server_share(),
+    })
+    assert r.status_code == 400
+
+def test_register_menolak_vault_payload_base64_invalid(client):
+    payload = _sample_vault_payload()
+    payload["nonce"] = "not-base64!"
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": payload,
+        "server_share": _sample_server_share(),
+    })
+    assert r.status_code == 400
+
+def test_register_menolak_nonce_length_invalid(client):
+    payload = _sample_vault_payload()
+    payload["nonce"] = _b64(11)
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": payload,
+        "server_share": _sample_server_share(),
+    })
+    assert r.status_code == 400
+
+def test_register_menolak_tag_length_invalid(client):
+    payload = _sample_vault_payload()
+    payload["tag"] = _b64(15)
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": payload,
+        "server_share": _sample_server_share(),
+    })
+    assert r.status_code == 400
+
+def test_register_menolak_ciphertext_kosong(client):
+    payload = _sample_vault_payload()
+    payload["ciphertext"] = base64.b64encode(b"").decode()
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": payload,
+        "server_share": _sample_server_share(),
+    })
+    assert r.status_code == 400
+
+def test_register_menolak_server_share_bukan_x_dua(client):
+    share = _sample_server_share()
+    share["x"] = 3
+    r = client.post("/vault/register", json={
+        "username": "bobsam",
+        "enc_vault_payload": _sample_vault_payload(),
+        "server_share": share,
+    })
+    assert r.status_code == 400
     
 # test fetch
 def test_fetch_sukses(client):
@@ -142,6 +211,25 @@ def test_update_nonce_berubah(client):
     data = client.get("/vault/fetch/endah").get_json()
     assert data["enc_vault_payload"]["nonce"] == nonce_baru
 
+def test_update_menolak_unknown_field(client):
+    _register(client, "dudi")
+    r = client.put("/vault/update", json={
+        "username": "dudi",
+        "enc_vault_payload": _sample_vault_payload(),
+        "debug": True,
+    })
+    assert r.status_code == 400
+
+@pytest.mark.parametrize("field", ["master_password", "derived_key", "recovery_share"])
+def test_update_menolak_field_rahasia_tambahan(client, field):
+    _register(client, "dudi")
+    r = client.put("/vault/update", json={
+        "username": "dudi",
+        field: "seharusnya_ditolak",
+        "enc_vault_payload": _sample_vault_payload(),
+    })
+    assert r.status_code == 400
+
 # test zero-knowledge
 def test_server_tidak_menerima_master_key(client):
     r = client.post("/vault/register", json={
@@ -152,21 +240,18 @@ def test_server_tidak_menerima_master_key(client):
     })
     assert r.status_code == 400
 
-def test_server_tidak_menyimpan_local_share(client):
+def test_server_tidak_menerima_local_share_terenkripsi(client):
     """
-    enc_local_payload dikirim client tapi server tidak menyimpannya. 
-    Server share tetap bisa diambil tanpa ada local share di response.
+    enc_local_payload tetap ditolak agar local share tidak pernah diterima server.
     """
-    client.post("/vault/register", json={
+    r = client.post("/vault/register", json={
         "username": "franco",
         "enc_local_payload": {"nonce": _b64(12), "ciphertext": _b64(32), "tag": _b64(16)}, 
         "enc_vault_payload": _sample_vault_payload(),
         "server_share": _sample_server_share(),
     })
-    data = client.get("/vault/fetch/franco").get_json()
-    # response gaboleh ada local share
-    assert "enc_local_payload" not in data
-    assert "local_share" not in data
+    assert r.status_code == 400
+    assert client.get("/vault/fetch/franco").status_code == 404
 
 def test_server_tidak_menyimpan_plaintext_vault(client):
     """

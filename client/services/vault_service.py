@@ -43,8 +43,13 @@ class VaultSession:
     def daftar(self):
         return self.entries
 
+    def _ensure_writable(self):
+        if self.readonly:
+            raise PermissionError("Mode backup bersifat read-only.")
+
     def tambah(self, nama_layanan: str, username: str,
                password: str, catatan: str = ""):
+        self._ensure_writable()
         e = PasswordEntry(nama_layanan=nama_layanan, username=username,
                           password=password, catatan=catatan)
         self.entries.append(e)
@@ -53,6 +58,7 @@ class VaultSession:
 
     def edit(self, idx: int, nama_layanan=None, username=None,
              password=None, catatan=None):
+        self._ensure_writable()
         if not (0 <= idx < len(self.entries)):
             raise IndexError("Nomor entri tidak valid.")
         e = self.entries[idx]
@@ -63,6 +69,7 @@ class VaultSession:
         self.modified = True
 
     def hapus(self, idx: int):
+        self._ensure_writable()
         if not (0 <= idx < len(self.entries)):
             raise IndexError("Nomor entri tidak valid.")
         removed = self.entries.pop(idx)
@@ -71,6 +78,7 @@ class VaultSession:
 
     def simpan(self):
         """Re-enkripsi vault dengan nonce baru, update server dan backup lokal."""
+        self._ensure_writable()
         entries_raw = [e.to_dict() for e in self.entries]
         vault_json = json.dumps(entries_raw, ensure_ascii=False)
         

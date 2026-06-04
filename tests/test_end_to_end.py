@@ -229,6 +229,20 @@ class TestModeBackup:
             sesi = buka_vault_backup("pw", self.recovery)
         assert sesi.readonly is True
 
+    def test_backup_session_menolak_operasi_write_langsung(self):
+        with patch.multiple("client.services.vault_service", **_CRYPTO_MOCK):
+            from client.services.vault_service import buka_vault_backup
+            sesi = buka_vault_backup("pw", self.recovery)
+
+        with pytest.raises(PermissionError, match="read-only"):
+            sesi.tambah("GitHub", "dev@test.com", "pw")
+        with pytest.raises(PermissionError, match="read-only"):
+            sesi.edit(0, password="baru")
+        with pytest.raises(PermissionError, match="read-only"):
+            sesi.hapus(0)
+        with pytest.raises(PermissionError, match="read-only"):
+            sesi.simpan()
+
     def test_recovery_share_format_salah_ditolak(self):
         with patch.multiple("client.services.vault_service", **_CRYPTO_MOCK):
             from client.services.vault_service import buka_vault_backup
