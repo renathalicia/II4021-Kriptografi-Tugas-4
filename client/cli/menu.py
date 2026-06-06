@@ -1,10 +1,12 @@
 import getpass
 import json
 import os
+import subprocess
+import sys
 import tempfile
 
-from client.crypto.qr_recovery import recovery_share_from_qr, recovery_share_to_qr
-from client.crypto.visual_crypto import merge_visual_shares, split_qr_visual
+from client.crypto.qr_recovery import recovery_share_to_qr
+from client.crypto.visual_crypto import split_qr_visual
 from client.services.vault_service import (
     init_vault, buka_vault_normal, buka_vault_backup,
     buat_password_acak, VaultSession
@@ -16,7 +18,6 @@ _api = APIClient()
 
 RECOVERY_SHARE_1_NAME = "recovery_visual_share_1.png"
 RECOVERY_SHARE_2_NAME = "recovery_visual_share_2.png"
-MERGED_RECOVERY_QR_NAME = "recovery_merged.png"
 
 
 def tampilkan_menu_utama():
@@ -66,22 +67,17 @@ def _menu_setup():
         print(f"[!] Gagal: {e}")
         return
 
-    print("\n" + "=" * 55)
-    print("  RECOVERY SHARE — SIMPAN SEKARANG, HANYA TAMPIL SEKALI")
-    print("=" * 55)
-    print(recovery_str)
-    print("=" * 55)
-
     try:
-        share1_path, share2_path = _buat_visual_recovery(recovery_str)
+        share1_path, share2_path = _buat_visual_recovery_qr_first(recovery_str)
     except Exception as e:
         print(f"[!] Gagal membuat visual recovery share: {e}")
-        print("[!] Simpan recovery share teks di atas sebagai fallback.")
+        print("[!] Recovery key emergency fallback:")
+        _cetak_recovery_key(recovery_str)
     else:
         print("[+] Visual recovery share dibuat:")
         print(f"    1. {share1_path}")
         print(f"    2. {share2_path}")
-        print("    Simpan kedua file ini terpisah; mode backup membutuhkan keduanya.")
+        print("    Simpan kedua file ini terpisah.")
 
     print("[+] Vault berhasil dibuat!")
 
@@ -105,7 +101,7 @@ def _menu_normal():
         print(f"[!] {e}")
         return
 
-    print("[+] Vault terbuka — MODE NORMAL")
+    print("[+] Vault terbuka - MODE NORMAL")
     _sesi_interaktif(sesi)
 
 
@@ -115,16 +111,7 @@ def _menu_backup():
         return
 
     pw = getpass.getpass("Master password: ")
-    pilihan = input("Recovery source: (1) visual share PNG  (2) teks manual [1]: ").strip() or "1"
-
-    if pilihan == "2":
-        recovery = input("Recovery share: ").strip()
-    else:
-        try:
-            recovery = _input_visual_recovery_share()
-        except Exception as e:
-            print(f"[!] Gagal membaca visual recovery share: {e}")
-            return
+    recovery = input("Recovery key: ").strip()
 
     try:
         sesi = buka_vault_backup(pw, recovery)
@@ -132,12 +119,59 @@ def _menu_backup():
         print(f"[!] {e}")
         return
 
-    print("[+] Vault terbuka — MODE BACKUP (read-only)")
+    print("[+] Vault terbuka - MODE BACKUP (read-only)")
     _sesi_interaktif(sesi)
 
 
 def _recovery_path(filename: str) -> str:
     return os.path.join(local_storage.DATA_DIR, filename)
+
+
+def _open_image(path: str) -> None:
+    if os.name == "nt":
+        os.startfile(path)  # type: ignore[attr-defined]
+        return
+
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.Popen(
+        [opener, path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _cetak_recovery_key(recovery_str: str) -> None:
+    print("=" * 55)
+    print("RECOVERY KEY - SIMPAN SEKARANG, HANYA TAMPIL SEKALI")
+    print("=" * 55)
+    print(recovery_str)
+    print("=" * 55)
+
+
+def _tanya_tampilkan_recovery_key(recovery_str: str) -> None:
+    pilihan = input("Tampilkan recovery key teks sebagai fallback? (y/N): ").strip().lower()
+    if pilihan == "y":
+        _cetak_recovery_key(recovery_str)
+
+
+def _buat_visual_recovery_qr_first(recovery_str: str) -> tuple[str, str]:
+    share = json.loads(recovery_str)
+    os.makedirs(local_storage.DATA_DIR, exist_ok=True)
+    share1_path = _recovery_path(RECOVERY_SHARE_1_NAME)
+    share2_path = _recovery_path(RECOVERY_SHARE_2_NAME)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        qr_path = os.path.join(tmp_dir, "recovery_qr.png")
+        recovery_share_to_qr(share, qr_path)
+
+        print("[*] QR recovery dibuka. Scan QR untuk mendapatkan recovery key.")
+        _open_image(qr_path)
+        input("Tekan Enter setelah QR selesai discan...")
+        _tanya_tampilkan_recovery_key(recovery_str)
+
+        split_qr_visual(qr_path, share1_path, share2_path)
+
+    return share1_path, share2_path
 
 
 def _buat_visual_recovery(recovery_str: str) -> tuple[str, str]:
@@ -152,23 +186,6 @@ def _buat_visual_recovery(recovery_str: str) -> tuple[str, str]:
         split_qr_visual(qr_path, share1_path, share2_path)
 
     return share1_path, share2_path
-
-
-def _input_visual_recovery_share() -> str:
-    default_share1 = _recovery_path(RECOVERY_SHARE_1_NAME)
-    default_share2 = _recovery_path(RECOVERY_SHARE_2_NAME)
-
-    share1_path = input(f"Visual share 1 [{default_share1}]: ").strip() or default_share1
-    share2_path = input(f"Visual share 2 [{default_share2}]: ").strip() or default_share2
-
-    return _recovery_share_from_visual_paths(share1_path, share2_path)
-
-
-def _recovery_share_from_visual_paths(share1_path: str, share2_path: str) -> str:
-    os.makedirs(local_storage.DATA_DIR, exist_ok=True)
-    merged_path = _recovery_path(MERGED_RECOVERY_QR_NAME)
-    merge_visual_shares(share1_path, share2_path, merged_path)
-    return recovery_share_from_qr(merged_path)
 
 
 # ===== Loop interaktif vault =====
@@ -240,13 +257,13 @@ def _handle_keluar(sesi: VaultSession):
 
 def _cetak_bantuan(readonly: bool):
     print("""
-  list           → tampilkan semua entri
-  show <no>      → detail entri + password
-  add            → tambah entri baru
-  edit <no>      → edit entri
-  delete <no>    → hapus entri
-  save           → enkripsi ulang dan simpan ke server
-  exit           → tutup vault
+  list           -> tampilkan semua entri
+  show <no>      -> detail entri + password
+  add            -> tambah entri baru
+  edit <no>      -> edit entri
+  delete <no>    -> hapus entri
+  save           -> enkripsi ulang dan simpan ke server
+  exit           -> tutup vault
     """)
     if readonly:
         print("  [Mode backup aktif: hanya list dan show]\n")
@@ -309,7 +326,7 @@ def _cmd_edit(sesi: VaultSession, arg: str):
 
     print(f"  --- Edit: {e.nama_layanan} (Enter = tidak diubah) ---")
     nama = input(f"  Nama layanan [{e.nama_layanan}]: ").strip()
-    usr  = input(f"  Username [{e.username}]: ").strip()
+    usr = input(f"  Username [{e.username}]: ").strip()
 
     pw = None
     if input("  Ganti password? (y/n): ").strip().lower() == "y":

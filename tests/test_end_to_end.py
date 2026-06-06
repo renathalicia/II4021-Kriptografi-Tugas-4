@@ -129,6 +129,69 @@ class TestInitVault:
                 init_vault("user1", "pw")
 
 
+class TestMenuSetupQrFirst:
+    @pytest.fixture(autouse=True)
+    def recovery(self):
+        self.recovery = json.dumps({"x": 3, "y": _FAKE_Y}, sort_keys=True, separators=(",", ":"))
+
+    def _run_menu_setup(self, monkeypatch, extra_inputs):
+        from client.cli import menu
+
+        inputs = iter(["user"] + list(extra_inputs))
+        passwords = iter(["pw", "pw"])
+        opened_paths = []
+
+        def fake_open(path):
+            opened_paths.append(path)
+            assert os.path.exists(path)
+
+        monkeypatch.setattr(menu, "init_vault", lambda username, password: self.recovery)
+        monkeypatch.setattr(menu.getpass, "getpass", lambda prompt: next(passwords))
+        monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+        monkeypatch.setattr(menu, "_open_image", fake_open)
+
+        menu._menu_setup()
+        return menu, opened_paths
+
+    def test_setup_qr_first_default_tidak_mencetak_recovery_key(self, monkeypatch, capsys):
+        menu, opened_paths = self._run_menu_setup(monkeypatch, ["", ""])
+        output = capsys.readouterr().out
+
+        assert opened_paths
+        assert not os.path.exists(opened_paths[0])
+        assert self.recovery not in output
+        assert os.path.exists(os.path.join(menu.local_storage.DATA_DIR, menu.RECOVERY_SHARE_1_NAME))
+        assert os.path.exists(os.path.join(menu.local_storage.DATA_DIR, menu.RECOVERY_SHARE_2_NAME))
+
+    def test_setup_qr_first_bisa_mencetak_recovery_key_fallback(self, monkeypatch, capsys):
+        self._run_menu_setup(monkeypatch, ["", "y"])
+        output = capsys.readouterr().out
+
+        assert self.recovery in output
+
+    def test_setup_visual_gagal_memaksa_recovery_key_tampil(self, monkeypatch, capsys):
+        from client.cli import menu
+
+        inputs = iter(["user"])
+        passwords = iter(["pw", "pw"])
+
+        monkeypatch.setattr(menu, "init_vault", lambda username, password: self.recovery)
+        monkeypatch.setattr(menu.getpass, "getpass", lambda prompt: next(passwords))
+        monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+        monkeypatch.setattr(
+            menu,
+            "_buat_visual_recovery_qr_first",
+            lambda recovery: (_ for _ in ()).throw(RuntimeError("display gagal")),
+        )
+
+        menu._menu_setup()
+        output = capsys.readouterr().out
+
+        assert "display gagal" in output
+        assert self.recovery in output
+        assert "Vault berhasil dibuat" in output
+
+
 class TestBukaVaultNormal:
     @pytest.fixture(autouse=True)
     def init_dulu(self, mock_api_ok):
@@ -258,10 +321,9 @@ class TestModeBackup:
             with pytest.raises(ValueError, match="Master password salah"):
                 buka_vault_backup("salah", self.recovery)
 
-    def test_menu_backup_visual_share_membuka_vault(self, monkeypatch):
+    def test_menu_backup_memakai_recovery_key_langsung(self, monkeypatch):
         from client.cli import menu
 
-        share1_path, share2_path = menu._buat_visual_recovery(self.recovery)
         calls = {}
 
         def fake_buka_vault_backup(password, recovery):
@@ -269,7 +331,7 @@ class TestModeBackup:
             calls["recovery"] = recovery
             return object()
 
-        inputs = iter(["1", share1_path, share2_path])
+        inputs = iter([self.recovery])
         monkeypatch.setattr(menu.getpass, "getpass", lambda prompt: "pw")
         monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
         monkeypatch.setattr(menu, "buka_vault_backup", fake_buka_vault_backup)
@@ -278,6 +340,43 @@ class TestModeBackup:
         menu._menu_backup()
 
         assert calls == {"password": "pw", "recovery": self.recovery}
+
+
+class TestXorShareScript:
+    @pytest.fixture(autouse=True)
+    def recovery(self):
+        self.recovery = json.dumps({"x": 3, "y": _FAKE_Y}, sort_keys=True, separators=(",", ":"))
+
+    def test_xorshare_membuka_qr_temp_tanpa_menyimpan_di_data(self, monkeypatch):
+        from client.cli import menu
+        import xorshare
+
+        menu._buat_visual_recovery(self.recovery)
+        opened_paths = []
+
+        def fake_open(path):
+            opened_paths.append(path)
+            assert os.path.exists(path)
+
+        monkeypatch.setattr(xorshare, "_open_image", fake_open)
+        monkeypatch.setattr("builtins.input", lambda prompt="": "")
+        monkeypatch.setattr(xorshare.sys, "argv", ["xorshare.py"])
+
+        assert xorshare.main() == 0
+
+        data_dir = os.path.abspath(menu.local_storage.DATA_DIR)
+        opened_path = os.path.abspath(opened_paths[0])
+        assert os.path.commonpath([data_dir, opened_path]) != data_dir
+        assert not os.path.exists(opened_path)
+
+    def test_xorshare_missing_share_exit_nonzero(self, monkeypatch, capsys):
+        import xorshare
+
+        monkeypatch.setattr(xorshare.sys, "argv", ["xorshare.py"])
+
+        assert xorshare.main() == 1
+        output = capsys.readouterr().out
+        assert "tidak ditemukan" in output
 
 
 class TestReenkripsivault:

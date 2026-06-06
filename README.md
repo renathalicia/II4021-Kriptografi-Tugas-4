@@ -1,6 +1,5 @@
 # II4021 Kriptografi Tugas 4 - Implementasi Shamir Secret Sharing pada Aplikasi Password Manager Terdistribusi
 
-
 Pengelola kata sandi berbasis CLI dengan arsitektur client-server. Isi vault
 dienkripsi memakai AES-128-GCM, dan master key untuk membukanya dipecah menjadi
 tiga share dengan Shamir Secret Sharing skema (2,3). Vault hanya terbuka bila
@@ -9,18 +8,18 @@ server yang bisa membuka vault sendirian.
 
 Dua mode akses:
 - Mode normal: kombinasi local share + server share. Bisa lihat, tambah, ubah, hapus.
-- Mode backup: kombinasi local share + recovery share. Read-only, dipakai saat server mati.
+- Mode backup: kombinasi local share + recovery key. Read-only, dipakai saat server mati.
 
 ## Teknologi yang digunakan
 
 - Python 3
-- Flask — server HTTP
-- SQLite — penyimpanan data terenkripsi di server
-- cryptography — AES-128-GCM dan PBKDF2 (KDF)
-- pycryptodome — Shamir Secret Sharing
-- qrcode + Pillow + OpenCV — QR code dan kriptografi visual recovery share (bonus)
-- requests — komunikasi HTTP sisi klien
-- pytest — pengujian
+- Flask - server HTTP
+- SQLite - penyimpanan data terenkripsi di server
+- cryptography - AES-128-GCM dan PBKDF2 (KDF)
+- pycryptodome - Shamir Secret Sharing
+- qrcode + Pillow + OpenCV - QR code dan kriptografi visual recovery share
+- requests - komunikasi HTTP sisi klien
+- pytest - pengujian
 
 ## Dependensi
 
@@ -50,13 +49,24 @@ Jalankan semua perintah dari root repository.
 
        python -m client.main
 
-   Ikuti menu: setup vault baru, buka mode normal, atau buka mode backup.
-   Saat setup, recovery share juga dibuat sebagai dua file visual share PNG di
-   folder `data/`. Mode backup dapat menggabungkan dua file PNG tersebut untuk
-   membaca kembali recovery share; paste teks recovery tetap tersedia sebagai
-   fallback.
+   Saat setup vault baru, aplikasi membuka QR recovery sementara. Scan QR
+   tersebut untuk mendapatkan recovery key dalam format JSON. Setelah user
+   menekan Enter, aplikasi menyimpan dua visual share PNG di folder `data/`:
+   `recovery_visual_share_1.png` dan `recovery_visual_share_2.png`.
 
-5. (Opsional) jalankan pengujian:
+   Saat membuka mode backup, aplikasi hanya meminta master password dan
+   recovery key hasil scan QR. Aplikasi tidak lagi meminta path file visual
+   share.
+
+5. Jika perlu mendapatkan QR recovery utuh lagi dari dua visual share default:
+
+       python xorshare.py
+
+   Script ini membaca dua PNG share dari `data/`, membuka QR hasil merge dari
+   file temporary untuk discan, lalu menghapus file temporary setelah Enter.
+   QR utuh tidak disimpan ke folder `data/`.
+
+6. (Opsional) jalankan pengujian:
 
        python -m pytest
 
@@ -71,15 +81,16 @@ Konfigurasi server di `server/config.py`:
 Konfigurasi klien:
 - BASE_URL server di `client/services/api_client.py` (default http://127.0.0.1:5000)
 - Data lokal klien di folder `data/`:
-  - client_config.json — local share terenkripsi, salt KDF, parameter KDF
-  - backup_vault.json — backup vault terenkripsi untuk mode backup
+  - client_config.json - local share terenkripsi, salt KDF, parameter KDF
+  - backup_vault.json - backup vault terenkripsi untuk mode backup
+  - recovery_visual_share_1.png dan recovery_visual_share_2.png - visual share untuk membentuk ulang QR recovery
 
 Folder `data/` diabaikan git (lihat `.gitignore`) karena berisi data pengguna lokal.
 
 ## Struktur direktori
 
     client/   kode klien: CLI, services, crypto, storage, models
-    server/   kode server: Flask app, routes, models, database, schema
+    server/   kode server: Flask app, routes, models, database
     tests/    pengujian crypto, server, dan end-to-end
     docs/     dokumentasi dan screenshot
 
