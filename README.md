@@ -49,26 +49,33 @@ Jalankan semua perintah dari root repository.
 
        python -m client.main
 
-   Saat setup vault baru, aplikasi membuka QR recovery sementara. Scan QR
-   tersebut untuk mendapatkan recovery key dalam format JSON. Setelah user
-   menekan Enter, aplikasi menyimpan dua visual share PNG di folder `data/`:
-   `recovery_visual_share_1.png` dan `recovery_visual_share_2.png`.
+   Saat setup vault baru:
+   1. Aplikasi membuka QR recovery sementara — scan QR tersebut dengan
+      kamera atau aplikasi QR scanner untuk mendapatkan recovery key (JSON).
+   2. Setelah Enter, aplikasi menawarkan untuk menampilkan recovery key
+      sebagai teks (fallback jika tidak sempat scan QR).
+   3. Aplikasi menyimpan dua visual share PNG di folder `data/`:
+      `recovery_visual_share_1.png` dan `recovery_visual_share_2.png`.
+      Simpan kedua file ini di tempat berbeda.
 
-   Saat membuka mode backup, aplikasi hanya meminta master password dan
-   recovery key hasil scan QR. Aplikasi tidak lagi meminta path file visual
-   share.
+   Saat membuka mode backup, aplikasi meminta master password dan recovery
+   key (string JSON yang didapat saat setup, baik dari scan QR maupun dari
+   tampilan teks fallback). Tidak perlu path file visual share.
 
-5. Jika perlu mendapatkan QR recovery utuh lagi dari dua visual share default:
+5. Jika perlu mendapatkan QR recovery utuh lagi dari dua visual share:
 
        python xorshare.py
 
-   Script ini membaca dua PNG share dari `data/`, membuka QR hasil merge dari
-   file temporary untuk discan, lalu menghapus file temporary setelah Enter.
-   QR utuh tidak disimpan ke folder `data/`.
+   Membaca `recovery_visual_share_1.png` dan `recovery_visual_share_2.png`
+   dari folder `data/`, merge XOR keduanya, lalu buka QR hasil merge di
+   image viewer untuk discan. QR utuh tidak disimpan ke disk — file
+   temporary otomatis dihapus setelah Enter.
 
 6. (Opsional) jalankan pengujian:
 
        python -m pytest
+
+   Konfigurasi pytest ada di `pytest.ini` di root project.
 
 ## Environment / konfigurasi
 
@@ -89,10 +96,13 @@ Folder `data/` diabaikan git (lihat `.gitignore`) karena berisi data pengguna lo
 
 ## Struktur direktori
 
-    client/   kode klien: CLI, services, crypto, storage, models
-    server/   kode server: Flask app, routes, models, database
-    tests/    pengujian crypto, server, dan end-to-end
-    docs/     dokumentasi dan screenshot
+    client/        kode klien: CLI, services, crypto, storage, models
+    server/        kode server: Flask app, routes, models, database
+    tests/         pengujian crypto, server, dan end-to-end
+    docs/          dokumentasi (PDF spesifikasi tugas dan laporan)
+    data/          data pengguna lokal (diabaikan git)
+    xorshare.py    script rekonstruksi QR recovery dari dua visual share
+    pytest.ini     konfigurasi pytest
 
 ## Anggota kelompok
 
